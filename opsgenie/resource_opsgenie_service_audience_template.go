@@ -14,6 +14,7 @@ func resourceOpsGenieServiceAudienceTemplate() *schema.Resource {
 	return &schema.Resource{
 		Read:   handleNonExistentResource(resourceOpsGenieServiceAudienceTemplateRead),
 		Update: resourceOpsGenieServiceAudienceTemplateUpdate,
+		Delete: resourceOpsGenieServiceAudienceTemplateDelete,
 		Importer: &schema.ResourceImporter{
 			State: schema.ImportStatePassthrough,
 		},
@@ -37,11 +38,17 @@ func resourceOpsGenieServiceAudienceTemplate() *schema.Resource {
 										Type:     schema.TypeSet,
 										Optional: true,
 										MaxItems: 50,
+										Elem: &schema.Schema{
+											Type: schema.TypeString,
+										},
 									},
 									"individuals": {
 										Type:     schema.TypeSet,
 										Optional: true,
 										MaxItems: 50,
+										Elem: &schema.Schema{
+											Type: schema.TypeString,
+										},
 									},
 								},
 							},
@@ -55,6 +62,9 @@ func resourceOpsGenieServiceAudienceTemplate() *schema.Resource {
 										Type:     schema.TypeSet,
 										Optional: true,
 										MaxItems: 50,
+										Elem: &schema.Schema{
+											Type: schema.TypeString,
+										},
 									},
 									"condition_match_type": {
 										Type:         schema.TypeString,
@@ -146,6 +156,29 @@ func resourceOpsGenieServiceAudienceTemplateUpdate(d *schema.ResourceData, meta 
 	}
 
 	return resourceOpsGenieServiceAudienceTemplateRead(d, meta)
+}
+
+func resourceOpsGenieServiceAudienceTemplateDelete(d *schema.ResourceData, meta interface{}) error {
+	client, err := service.NewClient(meta.(*OpsgenieClient).client.Config)
+	if err != nil {
+		return err
+	}
+
+	// delete updates with nil values
+	service_id := d.Get("service_id").(string)
+	updateRequest := &service.UpdateAudienceTemplateRequest{
+		ServiceId:   service_id,
+		Responder:   service.ResponderOfAudience{},
+		Stakeholder: service.StakeholderOfAudience{},
+	}
+
+	log.Printf("[INFO] Deleting OpsGenie Service Audience Template for service '%s'", d.Get("service_id").(string))
+	_, err = client.UpdateAudienceTemplate(context.Background(), updateRequest)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func expandOpsGenieServiceAudienceTemplateResponder(input []interface{}) service.ResponderOfAudience {

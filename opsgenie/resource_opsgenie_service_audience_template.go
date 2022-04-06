@@ -12,6 +12,7 @@ import (
 
 func resourceOpsGenieServiceAudienceTemplate() *schema.Resource {
 	return &schema.Resource{
+		Create: resourceOpsGenieServiceAudienceTemplateUpdate,
 		Read:   handleNonExistentResource(resourceOpsGenieServiceAudienceTemplateRead),
 		Update: resourceOpsGenieServiceAudienceTemplateUpdate,
 		Delete: resourceOpsGenieServiceAudienceTemplateDelete,
@@ -124,55 +125,67 @@ func resourceOpsGenieServiceAudienceTemplateRead(d *schema.ResourceData, meta in
 		return err
 	}
 
+	audience_template := 
 	d.Set("service_id", service_id)
-	d.Set("responder", result.Responder)
-	d.Set("stakeholder", result.Stakeholder)
+	d.Set("audience_template", [result.Responder, result.Stakeholder])
+	// d.Set("stakeholder", result.Stakeholder)
 
 	return nil
 }
 
-func resourceOpsGenieServiceAudienceTemplateUpdate(d *schema.ResourceData, meta interface{}) error {
+func resourceOpsGenieServiceAudienceTemplateUpdate(input *schema.ResourceData, meta interface{}) error {
 	client, err := service.NewClient(meta.(*OpsgenieClient).client.Config)
 	if err != nil {
 		return err
 	}
 
-	service_id := d.Get("service_id").(string)
+	service_id := input.Get("service_id").(string)
 	updateRequest := &service.UpdateAudienceTemplateRequest{
 		ServiceId: service_id,
 	}
 
-	audience_template := d.Get("audience_template").([]interface{})
-	for _, v := range audience_template {
-		config := v.(map[string]interface{})
-		updateRequest.Responder = expandOpsGenieServiceAudienceTemplateResponder(config["responder"].([]interface{}))
-		updateRequest.Stakeholder = expandOpsGenieServiceAudienceTemplateStakeholder(config["stakeholder"].([]interface{}))
+	audience_template := input.Get("audience_template").([]interface{})
+
+	if len(audience_template) > 0 {
+		for _, v := range audience_template {
+			config := v.(map[string]interface{})
+
+			responder := config["responder"].(*schema.Set)
+			if len(responder.List()) > 0 {
+				updateRequest.Responder = expandOpsGenieServiceAudienceTemplateResponder(responder)
+			}
+
+			stakeholder := config["stakeholder"].(*schema.Set)
+			if len(stakeholder.List()) > 0 {
+				updateRequest.Stakeholder = expandOpsGenieServiceAudienceTemplateStakeholder(stakeholder)
+			}
+		}
 	}
 
-	log.Printf("[INFO] Updating OpsGenie Service Audience Template for service '%s'", d.Get("service_id").(string))
+	log.Printf("[INFO] Updating OpsGenie Service Audience Template for service '%s'", input.Get("service_id").(string))
 	_, err = client.UpdateAudienceTemplate(context.Background(), updateRequest)
 	if err != nil {
 		return err
 	}
 
-	return resourceOpsGenieServiceAudienceTemplateRead(d, meta)
+	return resourceOpsGenieServiceAudienceTemplateRead(input, meta)
 }
 
-func resourceOpsGenieServiceAudienceTemplateDelete(d *schema.ResourceData, meta interface{}) error {
+func resourceOpsGenieServiceAudienceTemplateDelete(input *schema.ResourceData, meta interface{}) error {
 	client, err := service.NewClient(meta.(*OpsgenieClient).client.Config)
 	if err != nil {
 		return err
 	}
 
 	// delete updates with nil values
-	service_id := d.Get("service_id").(string)
+	service_id := input.Get("service_id").(string)
 	updateRequest := &service.UpdateAudienceTemplateRequest{
 		ServiceId:   service_id,
 		Responder:   service.ResponderOfAudience{},
 		Stakeholder: service.StakeholderOfAudience{},
 	}
 
-	log.Printf("[INFO] Deleting OpsGenie Service Audience Template for service '%s'", d.Get("service_id").(string))
+	log.Printf("[INFO] Deleting OpsGenie Service Audience Template for service '%s'", input.Get("service_id").(string))
 	_, err = client.UpdateAudienceTemplate(context.Background(), updateRequest)
 	if err != nil {
 		return err
@@ -181,39 +194,44 @@ func resourceOpsGenieServiceAudienceTemplateDelete(d *schema.ResourceData, meta 
 	return nil
 }
 
-func expandOpsGenieServiceAudienceTemplateResponder(input []interface{}) service.ResponderOfAudience {
-	ResponderOfAudience := service.ResponderOfAudience{}
-	if input != nil {
-		for _, v := range input {
-			config := v.(map[string]interface{})
+func expandOpsGenieServiceAudienceTemplateResponder(input *schema.Set) service.ResponderOfAudience {
+	responder := service.ResponderOfAudience{}
+	if input == nil {
+		return responder
+	}
 
-			if config["teams"].(*schema.Set).Len() > 0 {
-				ResponderOfAudience.Teams = flattenOpsgenieServiceAudienceTemplateRequestTeams(config["teams"].(*schema.Set))
-			}
+	for _, v := range input.List() {
+		config := v.(map[string]interface{})
 
-			if config["individuals"].(*schema.Set).Len() > 0 {
-				ResponderOfAudience.Individuals = flattenOpsgenieServiceAudienceTemplateRequestIndividuals(config["individuals"].(*schema.Set))
+		teams := config["teams"].(*schema.Set)
+		if len(teams.List()) > 0 {
+			responder.Teams = flattenOpsgenieServiceAudienceTemplateRequestTeams(teams)
+		}
 
-			}
+		individuals := config["individuals"].(*schema.Set)
+		if len(individuals.List()) > 0 {
+			responder.Individuals = flattenOpsgenieServiceAudienceTemplateRequestIndividuals(config["individuals"].(*schema.Set))
 		}
 	}
 
-	return ResponderOfAudience
+	return responder
 }
 
-func expandOpsGenieServiceAudienceTemplateStakeholder(input []interface{}) service.StakeholderOfAudience {
+func expandOpsGenieServiceAudienceTemplateStakeholder(input *schema.Set) service.StakeholderOfAudience {
 	StakeholderOfAudience := service.StakeholderOfAudience{}
 	if input != nil {
-		for _, v := range input {
+		for _, v := range input.List() {
 			config := v.(map[string]interface{})
 
 			if config["individuals"].(*schema.Set).Len() > 0 {
 				StakeholderOfAudience.Individuals = flattenOpsgenieServiceAudienceTemplateRequestIndividuals(config["individuals"].(*schema.Set))
 			}
-			if config["condition_match_type"].(*schema.Set).Len() > 0 {
-				StakeholderOfAudience.ConditionMatchType = og.ConditionMatchType(config["condition_match_type"].(string))
+			conditionMatchType := config["condition_match_type"].(string)
+			if len(conditionMatchType) > 0 {
+				StakeholderOfAudience.ConditionMatchType = og.ConditionMatchType(conditionMatchType)
 			}
-			if config["conditions"].(*schema.Set).Len() > 0 {
+			conditions := config["conditions"].([]interface{})
+			if len(conditions) > 0 {
 				StakeholderOfAudience.Conditions = expandOpsGenieServiceAudienceTemplateConditions(config["conditions"].([]interface{}))
 			}
 		}

@@ -57,10 +57,11 @@ func testSweepServiceAudienceTemplate(region string) error {
 
 func TestAccOpsGenieServiceAudienceTemplate_basic(t *testing.T) {
 	randomTeam := acctest.RandString(6)
-	randomResponder := acctest.RandString(6)
+	randomTeamResponder := acctest.RandString(6)
+	randomIndvResponder := acctest.RandString(6)
 	randomService := acctest.RandString(6)
 
-	config := testAccOpsGenieServiceAudienceTemplate_basic(randomTeam, randomResponder, randomService)
+	config := testAccOpsGenieServiceAudienceTemplate_basic(randomTeam, randomTeamResponder, randomIndvResponder, randomService)
 
 	resource.Test(t, resource.TestCase{
 		ProviderFactories: providerFactories,
@@ -126,7 +127,7 @@ func testCheckOpsGenieServiceAudienceTemplateExists(name string) resource.TestCh
 	}
 }
 
-func testAccOpsGenieServiceAudienceTemplate_basic(randomTeam, randomResponder, randomService string) string {
+func testAccOpsGenieServiceAudienceTemplate_basic(randomTeam, randomTeamResponder, randomIndvResponder, randomService string) string {
 	return fmt.Sprintf(`
 	resource "opsgenie_team" "test" {
 		name        = "genieteam-%s"
@@ -135,6 +136,11 @@ func testAccOpsGenieServiceAudienceTemplate_basic(randomTeam, randomResponder, r
 	resource "opsgenie_team" "test-responder" {
 		name        = "genieteam-%s"
 		description = "This team is a responder"
+	}
+	resource "opsgenie_user" "test" {
+		username  = "genietest-%s@opsgenie.com"
+		full_name = "Acceptance Test User"
+		role      = "User"
 	}
 	resource "opsgenie_service" "test" {
 		name  = "genietest-service-%s"
@@ -146,7 +152,10 @@ func testAccOpsGenieServiceAudienceTemplate_basic(randomTeam, randomResponder, r
 			responder {
 				teams = [opsgenie_team.test-responder.id]
 			}
+			stakeholder {
+				individuals = [opsgenie_user.test.id]
+			}
 		}
 	}
-	`, randomTeam, randomResponder, randomService)
+	`, randomTeam, randomTeamResponder, randomIndvResponder, randomService)
 }

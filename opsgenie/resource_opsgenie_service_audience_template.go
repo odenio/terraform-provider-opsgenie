@@ -26,7 +26,7 @@ func resourceOpsGenieServiceAudienceTemplate() *schema.Resource {
 				ValidateFunc: validation.StringLenBetween(1, 130),
 			},
 			"audience_template": {
-				Type:     schema.TypeList,
+				Type:     schema.TypeSet,
 				Optional: true,
 				Elem: &schema.Resource{
 					Schema: map[string]*schema.Schema{
@@ -118,16 +118,16 @@ func resourceOpsGenieServiceAudienceTemplateRead(d *schema.ResourceData, meta in
 
 	log.Printf("[INFO] Reading OpsGenie Service Audience Template for service: '%s'", service_id)
 
-	result, err := client.GetAudienceTemplate(context.Background(), &service.GetAudienceTemplateRequest{
+	audience_template, err := client.GetAudienceTemplate(context.Background(), &service.GetAudienceTemplateRequest{
 		ServiceId: service_id,
 	})
 	if err != nil {
 		return err
 	}
 
-	audience_template := 
 	d.Set("service_id", service_id)
-	d.Set("audience_template", [result.Responder, result.Stakeholder])
+	// audience_teamplate := make()
+	d.Set("audience_template", flattenOpsgenieServiceAudienceTemplate(audience_template))
 	// d.Set("stakeholder", result.Stakeholder)
 
 	return nil
@@ -144,10 +144,10 @@ func resourceOpsGenieServiceAudienceTemplateUpdate(input *schema.ResourceData, m
 		ServiceId: service_id,
 	}
 
-	audience_template := input.Get("audience_template").([]interface{})
+	audience_template := input.Get("audience_template").(*schema.Set)
 
-	if len(audience_template) > 0 {
-		for _, v := range audience_template {
+	if audience_template != nil {
+		for _, v := range audience_template.List() {
 			config := v.(map[string]interface{})
 
 			responder := config["responder"].(*schema.Set)
@@ -213,7 +213,6 @@ func expandOpsGenieServiceAudienceTemplateResponder(input *schema.Set) service.R
 			responder.Individuals = flattenOpsgenieServiceAudienceTemplateRequestIndividuals(config["individuals"].(*schema.Set))
 		}
 	}
-
 	return responder
 }
 
@@ -260,6 +259,41 @@ func expandOpsGenieServiceAudienceTemplateConditions(input []interface{}) []serv
 	}
 
 	return conditions
+}
+
+func flattenOpsgenieServiceAudienceTemplate(input *service.GetAudienceTemplateResult) []map[string]interface{} {
+	template := make([]map[string]interface{}, 0, 1)
+	out := make(map[string]interface{})
+	out["responder"] = flattenOpsgenieServiceAudienceTemplateResponder(input.Responder)
+	out["stakeholder"] = flattenOpsgenieServiceAudienceTemplateStakeholder(input.Stakeholder)
+	template = append(template, out)
+	return template
+}
+
+func flattenOpsgenieServiceAudienceTemplateStakeholder(input service.StakeholderOfAudience) []map[string]interface{} {
+	stakeholder := make([]map[string]interface{}, 0, 1)
+	out := make(map[string]interface{})
+	if len(input.Conditions) > 0{
+		out["conditions"] = input.Conditions
+	}
+	if len(input.ConditionMatchType) > 0 {
+		out["individuals"] = input.Individuals
+	}
+	stakeholder = append(stakeholder, out)
+	return stakeholder	
+}
+
+func flattenOpsgenieServiceAudienceTemplateResponder(input service.ResponderOfAudience) []map[string]interface{} {
+	responder := make([]map[string]interface{}, 0, 1)
+	out := make(map[string]interface{})
+	if len(input.Teams) > 0{
+		out["teams"] = input.Teams
+	}
+	if len(input.Individuals) > 0 {
+		out["individuals"] = input.Individuals
+	}
+	responder = append(responder, out)
+	return responder
 }
 
 func flattenOpsgenieServiceAudienceTemplateRequestIndividuals(input *schema.Set) []string {
